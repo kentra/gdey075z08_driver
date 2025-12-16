@@ -23,8 +23,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 ##
-
-import epd7in5b
+#src/gdey075z08_drive
+from src.gdey075z08_drive import epd7in5b
 from PIL import Image
 from PIL import ImageDraw
 from PIL import ImageFont

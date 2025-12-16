@@ -31,7 +31,7 @@ from typing import Tuple
 import RPi.GPIO as GPIO
 
 # from . import epdif
-from .static import Static
+from gdey075z08_driver.static import Static
 
 
 class EPD:
@@ -106,7 +106,7 @@ class EPD:
         self.send_data(0x3F)
 
         logging.info("Power on")
-        self.send_command(POWER_ON)
+        self.send_command(Static.POWER_ON)
         self.wait_until_idle()
 
         self.send_command(Static.PANEL_SETTING)

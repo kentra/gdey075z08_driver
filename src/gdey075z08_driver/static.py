@@ -1,7 +1,7 @@
 from pydantic_settings import BaseSettings
 
 
-class Static(BaseSettings):
+class Static:
     #: int Display resolution
     EPD_WIDTH: int = 800
     EPD_HEIGHT: int = 480
