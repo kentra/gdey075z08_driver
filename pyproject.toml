@@ -5,9 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "gdey075z08_driver"
 version = "0.0.5"
-authors = [
-	{ name="zhufucdev", email="1095291434@qq.com" }
-]
+authors = [{ name = "zhufucdev", email = "1095291434@qq.com" }]
 description = "Driver library to GDEY075Z08 e-paper display"
 readme = "README.md"
 requires-python = ">=3.7"
@@ -19,7 +17,9 @@ classifiers = [
 dependencies = [
 	"RPi.GPIO>=0.7.1",
 	"pillow>=9.4.0",
-	"spidev>=3.6"
+	"pydantic",
+	"pydantic-settings",
+	# "spidev>=3.6",
 ]
 
 [project.urls]

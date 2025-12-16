@@ -24,126 +24,111 @@
 # THE SOFTWARE.
 #
 import logging
+import time
+import spidev
 from typing import Tuple
 
 import RPi.GPIO as GPIO
 
-from . import epdif
-
-# Display resolution
-EPD_WIDTH = 800
-EPD_HEIGHT = 480
-
-# EPD7IN5 commands
-PANEL_SETTING = 0x00
-POWER_SETTING = 0x01
-POWER_OFF = 0x02
-POWER_OFF_SEQUENCE_SETTING = 0x03
-POWER_ON = 0x04
-POWER_ON_MEASURE = 0x05
-BOOSTER_SOFT_START = 0x06
-DEEP_SLEEP = 0x07
-DATA_START_TRANSMISSION_1 = 0x10
-DATA_STOP = 0x11
-DISPLAY_REFRESH = 0x12
-DATA_START_TRANSMISSION_2 = 0x13
-LUT_FOR_VCOM = 0x20
-LUT_BLUE = 0x21
-LUT_WHITE = 0x22
-LUT_GRAY_1 = 0x23
-LUT_GRAY_2 = 0x24
-LUT_RED_0 = 0x25
-LUT_RED_1 = 0x26
-LUT_RED_2 = 0x27
-LUT_RED_3 = 0x28
-LUT_XON = 0x29
-PLL_CONTROL = 0x30
-TEMPERATURE_SENSOR_COMMAND = 0x40
-TEMPERATURE_CALIBRATION = 0x41
-TEMPERATURE_SENSOR_WRITE = 0x42
-TEMPERATURE_SENSOR_READ = 0x43
-VCOM_AND_DATA_INTERVAL_SETTING = 0x50
-LOW_POWER_DETECTION = 0x51
-TCON_SETTING = 0x60
-TCON_RESOLUTION = 0x61
-SPI_FLASH_CONTROL = 0x65
-REVISION = 0x70
-GET_STATUS = 0x71
-AUTO_MEASUREMENT_VCOM = 0x80
-READ_VCOM_VALUE = 0x81
-VCM_DC_SETTING = 0x82
+# from . import epdif
+from .static import Static
 
 
 class EPD:
-    def __init__(self, red_bounds: Tuple[int, int] = (64, 192)):
-        """
-        Constructs an EPD controller
+    def __init__(
+        self,
+        reset_pin: int,
+        cs_pin: int,
+        dc_pin: int,
+        busy_pin: int,
+        red_bounds: Tuple[int, int] = (64, 192),
+    ) -> None:
+        """Constructs an EPD controller
         :param red_bounds: the (max, min) threshold for red pixels.
         Specifically, if a pixel's grayscale value is no smaller and no
         larger than the bounds, it will be considered red.
-        """
-        self.reset_pin = epdif.RST_PIN
-        self.dc_pin = epdif.DC_PIN
-        self.busy_pin = epdif.BUSY_PIN
-        self.width = EPD_WIDTH
-        self.height = EPD_HEIGHT
-        self.red_bounds = red_bounds
+        """  # noqa: D205
+        self.reset_pin: int = reset_pin
+        self.busy_pin: int = busy_pin
+        self.cs_pin: int = cs_pin
+        self.dc_pin: int = dc_pin
+        self.width: int = Static.EPD_WIDTH
+        self.height: int = Static.EPD_HEIGHT
+        self.red_bounds: tuple[int, int] = red_bounds
+        self.__spi_init()
 
-    def digital_write(self, pin, value):
-        epdif.epd_digital_write(pin, value)
+    def __spi_init(self) -> int:
+        self.SPI = spidev.SpiDev(0, 0)
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setwarnings(False)
+        GPIO.setup(self.reset_pin, GPIO.OUT)
+        GPIO.setup(self.dc_pin, GPIO.OUT)
+        GPIO.setup(self.cs_pin, GPIO.OUT)
+        GPIO.setup(self.busy_pin, GPIO.IN)
+        self.SPI.max_speed_hz = 2000000
+        self.SPI.mode = 0b00
+        return 0
 
-    def digital_read(self, pin):
-        return epdif.epd_digital_read(pin)
+    def __spi_transfer(self, data) -> None:
+        self.SPI.writebytes(data)
 
-    def delay_ms(self, delaytime):
-        epdif.epd_delay_ms(delaytime)
+    def digital_write(self, pin, value) -> None:
+        # SPI device, bus = 0, device = 0
+        GPIO.output(pin, value)
 
-    def send_command(self, command):
+    def digital_read(self, pin) -> bool:
+        return GPIO.input(pin)
+
+    def delay_ms(self, delaytime) -> None:
+        time.sleep(delaytime / 1000.0)
+
+    def send_command(self, command) -> None:
         self.digital_write(self.dc_pin, GPIO.LOW)
         # the parameter type is list but not int
         # so use [command] instead of command
-        epdif.spi_transfer([command])
+        self.__spi_transfer([command])
 
-    def send_data(self, data):
+    def send_data(self, data) -> None:
         self.digital_write(self.dc_pin, GPIO.HIGH)
         # the parameter type is list but not int
         # so use [data] instead of data
-        epdif.spi_transfer([data])
+        self.__spi_transfer([data])
 
-    def init(self):
-        if epdif.epd_init() != 0:
+    def init(self) -> int:
+        if self.__spi_init() != 0:
             return -1
         logging.info("Initialization begin")
         self.reset()
-        self.send_command(POWER_SETTING)
+        self.send_command(Static.POWER_SETTING)
         self.send_data(0x07)
         self.send_data(0x07)
-        self.send_data(0x3f)
-        self.send_data(0x3f)
+        self.send_data(0x3F)
+        self.send_data(0x3F)
 
         logging.info("Power on")
         self.send_command(POWER_ON)
         self.wait_until_idle()
 
-        self.send_command(PANEL_SETTING)
-        self.send_data(0x0f)
+        self.send_command(Static.PANEL_SETTING)
+        self.send_data(0x0F)
 
         self.send_command(0x15)
         self.send_data(0x00)
 
         logging.info("VCOM and data intervals set")
-        self.send_command(VCOM_AND_DATA_INTERVAL_SETTING)
+        self.send_command(Static.VCOM_AND_DATA_INTERVAL_SETTING)
         self.send_data(0x11)
         self.send_data(0x07)
 
         logging.info("Tcon set")
-        self.send_command(TCON_SETTING)
-        self.send_data(LUT_WHITE)
+        self.send_command(Static.TCON_SETTING)
+        self.send_data(Static.LUT_WHITE)
+        return 0
 
     def wait_until_idle(self):
         busy = True
         while busy:
-            self.send_command(GET_STATUS)
+            self.send_command(Static.GET_STATUS)
             busy = self.digital_read(self.busy_pin) == 0x00
 
     def reset(self):
@@ -153,20 +138,22 @@ class EPD:
         self.delay_ms(200)
 
     def get_frame_buffer(self, image):
-        buf_w = [0xff] * int(self.height * self.width / 8)
+        buf_w = [0xFF] * int(self.height * self.width / 8)
         buf_r = [0x00] * int(self.height * self.width / 8)
         # Set buffer to value of Python Imaging Library image.
         # Image must be in mode L.
-        image_grayscale = image.convert('L')
+        image_grayscale = image.convert("L")
         imwidth, imheight = image_grayscale.size
         if imwidth != self.width or imheight != self.height:
-            raise ValueError('Image must be same dimensions as display \
-                ({0}x{1}).'.format(self.width, self.height))
+            raise ValueError(
+                "Image must be same dimensions as display \
+                ({0}x{1}).".format(self.width, self.height)
+            )
 
         pixels = image_grayscale.load()
         for y in range(self.height):
             for x in range(int(self.width / 8)):
-                sign_w = 0xff
+                sign_w = 0xFF
                 sign_r = 0x00
                 for i in range(0, 8):
                     p = pixels[x * 8 + i, y]
@@ -186,17 +173,17 @@ class EPD:
             for data in buf:
                 self.send_data(data)
 
-        self.send_command(DATA_START_TRANSMISSION_1)
+        self.send_command(Static.DATA_START_TRANSMISSION_1)
         write_buffer(buf_w)
-        self.send_command(DATA_START_TRANSMISSION_2)
+        self.send_command(Static.DATA_START_TRANSMISSION_2)
         write_buffer(buf_r)
 
-        self.send_command(DISPLAY_REFRESH)
+        self.send_command(Static.DISPLAY_REFRESH)
         self.delay_ms(100)
         self.wait_until_idle()
 
     def sleep(self):
-        self.send_command(POWER_OFF)
+        self.send_command(Static.POWER_OFF)
         self.wait_until_idle()
-        self.send_command(DEEP_SLEEP)
-        self.send_data(0xa5)
+        self.send_command(Static.DEEP_SLEEP)
+        self.send_data(0xA5)
